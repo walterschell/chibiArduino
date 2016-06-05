@@ -60,6 +60,7 @@ void chibiGetIEEEAddr(uint8_t *ieee_addr);
 uint8_t chibiRegRead(uint8_t addr);
 void chibiRegWrite(uint8_t addr, uint8_t val);
 uint8_t chibiTx(uint16_t addr, uint8_t *data, uint8_t len);
+uint8_t chibiTx(uint64_t *addr, uint8_t *data, uint8_t len);
 uint8_t chibiDataRcvd();
 uint8_t chibiGetData(uint8_t *data);
 uint8_t chibiGetRSSI();

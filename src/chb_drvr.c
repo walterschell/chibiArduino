@@ -483,10 +483,11 @@ static U8 chb_set_state(U8 state)
     Sets the IEEE address of the radio.
 */
 /**************************************************************************/
-void chb_set_ieee_addr(U8 *addr)
+void chb_set_ieee_addr(U64 addr)
 {
-    chb_eeprom_write(CHB_EEPROM_IEEE_ADDR, addr, 8); 
-    chb_reg_write64(IEEE_ADDR_0, addr); 
+    chb_eeprom_write(CHB_EEPROM_IEEE_ADDR, (U8 *) &addr, 8); 
+    chb_reg_write64(IEEE_ADDR_0, (U8 *) &addr); 
+    chb_get_pcb()->src_addr64 = addr;
 }
 
 /**************************************************************************/
@@ -494,9 +495,10 @@ void chb_set_ieee_addr(U8 *addr)
     Retrieves the IEEE address of the radio.
 */
 /**************************************************************************/
-void chb_get_ieee_addr(U8 *addr)
+void chb_get_ieee_addr()
 {
-    chb_eeprom_read(CHB_EEPROM_IEEE_ADDR, addr, 8);
+  U64 addr;  
+  chb_eeprom_read(CHB_EEPROM_IEEE_ADDR, (U8 *) &addr, 8);
 }
 
 /**************************************************************************/

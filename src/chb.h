@@ -38,21 +38,33 @@
 #include "types.h"
 
 #define CHB_HDR_SZ        9    // FCF + seq + pan_id + dest_addr + src_addr (2 + 1 + 2 + 2 + 2)
+#define CHB_LONG_HDR_SZ 21//FCF + seq + pan_id + dest_addr + src_addr (2 + 1 + 2 + 8 + 8)
 #define CHB_FCS_LEN       2
-
-// frame_type = data
-// security enabled = false
-// frame pending = false
-// ack request = false
-// pan ID compression = true
+// least signifigant bit first value & mask
+// frame_type = data 0b001 & 0b111
+// security enabled = false 0 & (1 << 3)
+// frame pending = false 0 & (1 << 4)
+// ack request = false 0 & (1 << 5)
+// pan ID compression = true 1 & (1 << 6)
+// bit 7 reserved
+// 0b0100 0001
 #define CHB_FCF_BYTE_0    0x41    
 
-// dest addr = 16-bit
-// frame version = 802.15.4 (not 2003)
-// src addr = 16-bit
+// bits 89 (01) reserved (sequence number suppression)
+// dest addr = 16-bit 10 & (0b11 << 2)
+// frame version = 802.15.4 with 2006 extensions 0b01 & (0b11 << 4)
+// src addr = 16-bit 10 (0b11 << 6)
+// 0b1001 1000
 #define CHB_FCF_BYTE_1    0x98
 
-#define CHB_ACK_REQ_POS   5
+// bits 89 (01) reserved (sequence number suppression)
+// dest addr = 64-bit 11 & (0b11 << 2)
+// frame version = 802.15.4 with 2006 extensions 0b01 & (0b11 << 4)
+// src addr = 64-bit 11 (0b11 << 6)
+// 0b1101 1100
+#define CHB_FCF64_BYTE_1    0x98
+
+#define CHB_ACK_REQ_POS   0xdc
 
 enum
 {
@@ -66,6 +78,7 @@ enum
 typedef struct
 {
     U16 src_addr;
+    U64 src_addr64;
     U8 seq;
     volatile bool data_rcv;
     volatile bool trx_end;
@@ -81,19 +94,32 @@ typedef struct
     U8 status;
     U8 ed;
     U8 crc;
+    
 } pcb_t;
 
 typedef struct
 {
     U8 len;
-    U16 src_addr;
-    U16 dest_addr;
+    U8 src_addr_len;
+    U8 dst_addr_len;
+    union
+    {
+      U16 src_addr16;
+      U64 src_addr64;
+    };
+    union
+    {
+      U16 dest_addr16;
+      U64 dest_addr64;
+    };
     U8 *data;
 } chb_rx_data_t;
 
 void chb_init();
 pcb_t *chb_get_pcb();
 U8 chb_write(U16 addr, U8 *data, U8 len);
+U8 chb_write(U64 addr, U8 *data, U8 len);
+
 U8 chb_read(chb_rx_data_t *rx);
 
 #endif

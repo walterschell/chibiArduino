@@ -43,7 +43,12 @@ static pcb_t pcb;
 // these are for the duplicate checking and rejection
 static U8 prev_seq;
 static U16 prev_src_addr;
-
+static unsigned char reverse_byte(unsigned char b) {
+   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+   return b;
+}
 /**************************************************************************/
 /*!
 
@@ -53,6 +58,7 @@ void chb_init()
 {
     memset(&pcb, 0, sizeof(pcb_t));
     pcb.src_addr = chb_get_short_addr();
+    pcb.src_addr64 = chb_get_ieee_addr();
 
     // reset prev_seq and prev_src_addr to default values
     // there's a problem if the radio gets re-initialized since no initializing the prev_seq and 
@@ -82,6 +88,38 @@ pcb_t *chb_get_pcb()
     return &pcb;
 }
 
+/**************************************************************************/
+/*! 
+    Requires the dest addr, location to store data, and len of payload.
+    Returns the length of the hdr. 
+*/
+/**************************************************************************/
+static U8 chb_gen_hdr(U8 *hdr, U64 addr, U8 len)
+{
+    U8 *hdr_ptr = hdr;
+
+    // calc frame size and put in 0 position of array
+    // frame size = hdr sz + payload len + fcs len
+    *hdr_ptr++ = CHB_LONG_HDR_SZ + len + CHB_FCS_LEN;
+
+    // use default fcf byte 0 val but test for ack request. we won't request
+    // ack if broadcast. all other cases we will.
+    *hdr_ptr++ = CHB_FCF_BYTE_0 | ((addr != 0xFFFF) << CHB_ACK_REQ_POS);
+    *hdr_ptr++ = CHB_FCF64_BYTE_1;
+
+    *hdr_ptr++ = pcb.seq++;
+
+    // fill out dest pan ID, dest addr, src addr
+    *(U16 *)hdr_ptr = CHB_PAN_ID;
+    hdr_ptr += sizeof(U16);
+    *(U64 *)hdr_ptr = addr;
+    hdr_ptr += sizeof(U16);
+    *(U64 *)hdr_ptr = pcb.src_addr64;
+    hdr_ptr += sizeof(U16);
+    
+    // return the len of the header
+    return hdr_ptr - hdr;
+}
 /**************************************************************************/
 /*! 
     Requires the dest addr, location to store data, and len of payload.
@@ -166,6 +204,53 @@ U8 chb_write(U16 addr, U8 *data, U8 len)
     }
 
     return CHB_SUCCESS;
+}
+U8 chb_write(U64 addr, U8 *data, U8 len)
+{
+      U8 status, frm_len, hdr_len, hdr[CHB_LONG_HDR_SZ + 1];
+    
+    while (len > 0)
+    {
+        // calculate which frame len to use. if greater than max payload, split
+        // up operation.
+        frm_len = (len > CHB_MAX_PAYLOAD) ? CHB_MAX_PAYLOAD : len;
+
+        // gen frame header
+        hdr_len = chb_gen_hdr(hdr, addr, frm_len);
+
+        // send data to chip
+        status = chb_tx(hdr, data, frm_len);
+
+        if (status != CHB_SUCCESS)
+        {
+            switch (status)
+            {
+            case RADIO_SUCCESS:
+                // fall through
+            case CHB_SUCCESS_DATA_PENDING:
+                pcb.txd_success++;
+                break;
+
+            case CHB_NO_ACK:
+                pcb.txd_noack++;
+                break;
+
+            case CHB_CHANNEL_ACCESS_FAILURE:
+                pcb.txd_channel_fail++;
+                break;
+
+            default:
+                break;
+            }
+            return status;
+        }
+
+        // adjust len and restart
+        len = len - frm_len;
+    }
+
+    return CHB_SUCCESS;
+
 }
 
 /**************************************************************************/
